@@ -1,0 +1,70 @@
+FROM centos:centos6
+MAINTAINER lreeder
+ 
+#Helpful utils, but only sudo is required
+#RUN yum -y install tar
+#RUN yum -y install vim
+#RUN yum -y install nc
+RUN yum -y install sudo
+ 
+######## JDK7
+ 
+#Note that ADD uncompresses this tarball automatically
+ADD jdk-7u72-linux-x64.tar.gz /opt
+WORKDIR /opt/jdk1.7.0_72
+RUN alternatives --install /usr/bin/java java /opt/jdk1.7.0_72/bin/java 1
+RUN alternatives --install /usr/bin/jar jar /opt/jdk1.7.0_72/bin/jar 1
+RUN alternatives --install /usr/bin/javac javac /opt/jdk1.7.0_72/bin/javac 1
+RUN echo "JAVA_HOME=/opt/jdk1.7.0_72" >> /etc/environment
+ 
+######## install python 2.7
+RUN /usr/bin/curl -s 'http://www.python.org/download/releases/' | gawk 'match($0, /The current production versions are <strong>([0-9.]+)<\/strong>/, ary) {print ary[1]}' > PYTHON_VERSION
+RUN cat PYTHON_VERSION | { read VERSION; wget -O Python-${VERSION}.tar.xz http://python.org/ftp/python/${VERSION}/Python-${VERSION}.tar.xz && tar -xf Python-${VERSION}.tar.xz; }
+RUN cat PYTHON_VERSION | { read VERSION; cd Python-${VERSION} && ./configure --prefix=/usr/local && make && make altinstall; }
+RUN rm -rf Python*
+RUN ln -s /usr/local/bin/python2.7 /usr/local/bin/python
+
+######## bootstrap python setuptools and distribute
+RUN /usr/bin/curl -O http://python-distribute.org/distribute_setup.py
+RUN /usr/local/bin/python distribute_setup.py
+RUN rm -rf distribute_setup.py
+RUN easy_install pip
+
+######## TOMCAT
+ 
+#Note that ADD uncompresses this tarball automatically
+ADD apache-tomcat-7.0.57.tar.gz /usr/share
+WORKDIR /usr/share/
+RUN mv  apache-tomcat-7.0.57 tomcat7
+RUN echo "JAVA_HOME=/opt/jdk1.7.0_72/" >> /etc/default/tomcat7
+RUN groupadd tomcat
+RUN useradd -s /bin/bash -g tomcat tomcat
+RUN chown -Rf tomcat.tomcat /usr/share/tomcat7
+EXPOSE 8080
+
+###### Install MongoDB
+RUN echo -e "[mongodb]\nname=MongoDB Repository\nbaseurl=https://repo.mongodb.org/yum/redhat/7/mongodb-org/3.2/`uname -m`/\ngpgcheck=0\nenabled=1" > /etc/yum.repos.d/mongodb.repo && \
+    yum install -y mongodb-org && \
+    yum clean all && \
+    chown -R mongod:mongod /var/lib/mongo
+
+# Copy config mongodb
+COPY etc/ /etc/
+
+# User
+USER mongod
+
+# Mountable directories
+VOLUME ["/var/lib/mongo"]
+
+# Set the environment variables
+ENV HOME /var/lib/mongo
+
+# Working directory
+WORKDIR /var/lib/mongo
+
+ENTRYPOINT ["/bin/mongod"]
+CMD ["-f", "/etc/mongod.conf"]
+
+# Expose ports.
+EXPOSE 27017
