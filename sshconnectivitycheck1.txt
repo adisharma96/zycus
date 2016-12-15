@@ -1,0 +1,14 @@
+#!/bin/bash
+echo "enter user"
+read user
+USERNAME=$user
+echo "enter hostname"
+read host1
+HOSTS=$host1
+echo "Now enter command"
+read command
+for HOSTNAME in ${HOSTS}
+do
+ssh-copy-id -i ~/.ssh/id_rsa.pub ${USERNAME}@${HOSTS}
+ssh  ${USERNAME}@${HOSTS} "$command" | tee 
+done
